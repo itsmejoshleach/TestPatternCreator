@@ -1,180 +1,295 @@
-# 🎛 Test Pattern Controller
+# 🎛 Broadcast Test Pattern & Streaming Controller
 
-A Flask + FFmpeg broadcast-style control system for generating,
-previewing, and routing test patterns across multiple monitors or file
-export, running in a Chrome kiosk interface.
+A self-contained **Flask-based broadcast control system** for generating test patterns, streaming via RTSP/RTMP/SRT/UDP, recording to file, and outputting to local monitors.
 
-------------------------------------------------------------------------
+It integrates:
+- 🎥 FFmpeg (encoding & streaming)
+- 📡 MediaMTX (RTSP/RTMP/SRT server)
+- 🖥 FFplay (monitor output)
+- 🎮 Bitfocus Companion (Stream Deck control)
+- 🌐 Flask web UI (control surface)
 
-## 🚀 Features
+---
 
-### 🎨 Test Pattern Generator
+# 🚀 Features
 
--   SMPTE Bars
--   HD Bars
--   RGB test pattern
--   Zone plate
--   Test grids
--   Black screen
+## 🎥 Test Pattern Generator
+- SMPTE Bars
+- HD Bars
+- Test Grid / Test Grid 2
+- RGB test pattern
+- Zone Plate
+- Black screen
 
-------------------------------------------------------------------------
+---
 
-### 🖥 Output Routing
+## 📡 Output Modes
 
--   Auto-detects all connected monitors
--   Sends output to selected display
--   Exports video files via FFmpeg
--   Download render with Save As dialog (browser controlled)
+### Stream Outputs
+- RTSP → MediaMTX
+- RTMP → MediaMTX
+- SRT → MediaMTX
+- UDP → Local network stream
 
-------------------------------------------------------------------------
+### Local Outputs
+- 📁 File recording (MP4)
+- 🖥 Monitor fullscreen output (FFplay)
 
-### 👁 Live Previews
+---
 
--   FFmpeg-generated thumbnails
--   Click-to-select pattern interface
--   Instant visual feedback
+## 🧠 Stream Control System
+- Named streams (user-defined IDs)
+- Multiple concurrent streams
+- Start / Stop per stream
+- Live status monitoring
 
-------------------------------------------------------------------------
+---
 
-### 💾 State Memory
+## 🖥 Multi-Monitor Support
+- Detects all system monitors
+- Select target display for fullscreen preview
 
--   Remembers selected pattern
--   Remembers selected output
--   Restores state after refresh/restart
+---
 
-------------------------------------------------------------------------
+## 🎮 Companion Integration (Stream Deck)
+Full HTTP API for control:
 
-### 🖥 Kiosk Mode UI
+- Start stream
+- Stop stream
+- Query status
 
--   Fullscreen Chrome launch
--   No browser UI elements
--   Designed for broadcast / control room use
+---
 
-------------------------------------------------------------------------
+# 🧱 System Architecture
 
-## 🧱 Project Structure
+```
+Browser UI (Flask frontend)
+        ↓
+Flask API (control layer)
+        ↓
+FFmpeg / FFplay (media engine)
+        ↓
+MediaMTX (stream server)
+```
 
-    TestPatternController/
-    │
-    ├-- app.py              # Flask backend + FFmpeg logic
-    ├-- main.py             # Chrome kiosk launcher
-    │
-    └-- templates/
-        └-- index.html     # Control UI
+---
 
-------------------------------------------------------------------------
+# 📦 Requirements
 
-## ⚙️ Requirements
+## 🧩 System Tools
 
-### Python dependencies
+### FFmpeg
+Ensure installed and in PATH:
+```bash
+ffmpeg -version
+```
 
-``` bash
+### MediaMTX
+Download:
+https://github.com/bluenviron/mediamtx
+
+Place in project root:
+```
+mediamtx.exe
+```
+
+---
+
+## 🐍 Python Dependencies
+
+```bash
 pip install flask screeninfo
 ```
 
-### System requirements
+---
 
--   Python 3.10+
--   FFmpeg installed and available in PATH
--   Google Chrome (for kiosk mode)
+# ▶ Running the Application
 
-------------------------------------------------------------------------
-
-## ▶️ Running the app
-
-### Start system
-
-``` bash
-python main.py
+```bash
+python app.py
 ```
 
-This will: - Start Flask backend - Launch Chrome in fullscreen kiosk
-mode - Open control UI automatically
+Then open:
 
-------------------------------------------------------------------------
+```
+http://127.0.0.1:5000
+```
 
-## 🎛 How to use
+---
 
-### 1. Select a test pattern (top section)
+# 🎛 Using the Interface
 
-Click any preview tile to select it.
+## 1. Select Test Pattern
+Click any preview tile.
 
-### 2. Choose output (bottom bar)
+## 2. Set Stream Name
+This becomes:
+- RTSP path
+- RTMP key
+- SRT stream ID
+- File name (for recordings)
 
--   Any detected monitor
--   Download render (Save As dialog)
--   File export (MP4 generation)
+## 3. Choose Output Type
+- RTSP / RTMP / SRT / UDP
+- File recording
+- Monitor output
 
-### 3. Press GO
+## 4. Select Monitor (if needed)
 
-Routes pattern to selected output or triggers file render/download
+## 5. Press GO
+Starts the stream immediately.
 
-### 4. STOP
+---
 
-Immediately stops FFplay output
+# 📡 Streaming Endpoints
 
-------------------------------------------------------------------------
+## RTSP
+```
+rtsp://127.0.0.1:8554/<stream_name>
+```
 
-## 🧠 Architecture
+## RTMP
+```
+rtmp://127.0.0.1:1935/live/<stream_name>
+```
 
-Flask UI → Pattern Selection → FFmpeg / FFplay → Monitor/File Output
+## SRT
+```
+srt://127.0.0.1:8890?streamid=<stream_name>
+```
 
-------------------------------------------------------------------------
+---
 
-## 🎬 Output Modes
+# 📁 File Output
 
-### Monitor Output
+Generates:
 
--   FFplay fullscreen
--   Borderless window
--   Per-monitor positioning
+```
+<stream_name>.mp4
+```
 
-### File Export
+---
 
--   FFmpeg MP4 render
--   Local save or download
+# 🖥 Monitor Mode
 
-### Download Mode
+- Launches FFplay fullscreen
+- Uses selected monitor index
+- Real-time test pattern preview
 
--   Server renders file
--   Browser prompts Save As
+---
 
-------------------------------------------------------------------------
+# 🎮 Bitfocus Companion Integration
 
-## 🧪 FFmpeg Sources
+## Start Stream
 
--   smptebars
--   smptehdbars
--   testsrc
--   testsrc2
--   rgbtestsrc
--   zoneplate
--   color=black
+**POST**
+```
+/api/stream/start
+```
 
-------------------------------------------------------------------------
+```json
+{
+  "pattern": "Test Grid",
+  "protocol": "rtsp",
+  "mode": "stream",
+  "name": "CAM_A"
+}
+```
 
-## 🧰 Future Upgrades
+---
 
--   Program / Preview mode
--   Keyboard shortcuts
--   Monitor routing map
--   Waveform + vectorscope
--   Preset scenes
--   Stream Deck support
+## Stop Stream
 
-------------------------------------------------------------------------
+**POST**
+```
+/api/stream/stop
+```
 
-## ⚠️ Notes
+```json
+{
+  "id": "CAM_A"
+}
+```
 
--   FFmpeg required in PATH
--   Chrome kiosk mode may need path adjustment
--   Windows-first design
+---
 
-------------------------------------------------------------------------
+## Status
 
-## 🧑‍💻 Purpose
+**GET**
+```
+/api/status
+```
 
-Broadcast-style test signal generator for AV, broadcast, and
-multi-display testing workflows.
+Returns all active streams.
 
-©️ 2026 itsmejoshleach
+---
+
+# 📊 Status Dashboard
+
+Shows:
+- Stream name
+- Pattern type
+- Output mode
+- Running state (live tracking)
+
+Auto-refreshes every second.
+
+---
+
+# ⚙️ Configuration Notes
+
+## MediaMTX must be running
+The app auto-starts it if available:
+
+```
+mediamtx.exe
+```
+
+---
+
+## Ports Used
+
+| Service | Port |
+|--------|------|
+| Flask UI | 5000 |
+| RTSP | 8554 |
+| RTMP | 1935 |
+| SRT | 8890 |
+
+---
+
+# 🧠 Behaviour Notes
+
+- Streams persist until manually stopped
+- File mode records for 60 seconds
+- Monitor mode opens fullscreen FFplay window
+- Multiple streams can run at once
+
+---
+
+# 🔥 Future Enhancements
+
+- 🎛 OBS-style scene switching
+- 📡 Multi-output per stream (RTSP + file + SRT)
+- 📊 Live bitrate / FPS monitoring
+- 🌐 Browser-based video preview (no VLC needed)
+- 🎮 Native Stream Deck plugin (Companion module)
+- 💾 Save/load broadcast profiles
+- 🎬 Transition effects between patterns
+
+---
+
+# 🧑‍💻 Purpose
+
+Built as a **broadcast test and simulation engine** for:
+
+- Video signal testing
+- Streaming pipeline validation
+- Multi-output encoding workflows
+- Live production experimentation
+- Broadcast engineering learning tool
+
+---
+
+# 📄 License
+ ©️ 2026 itsmejoshleach
