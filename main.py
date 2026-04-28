@@ -4,13 +4,13 @@ import subprocess
 import os
 from app import app
 
-def run_flask():
+def run():
     app.run(host="127.0.0.1", port=5000, debug=False)
 
 def get_chrome():
     paths = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
     ]
     for p in paths:
         if os.path.exists(p):
@@ -18,8 +18,7 @@ def get_chrome():
     return None
 
 if __name__ == "__main__":
-
-    threading.Thread(target=run_flask, daemon=True).start()
+    threading.Thread(target=run, daemon=True).start()
     time.sleep(1.5)
 
     chrome = get_chrome()
@@ -31,9 +30,7 @@ if __name__ == "__main__":
             "--kiosk",
             "--app=" + url,
             "--no-first-run",
-            "--disable-infobars",
-            "--disable-session-crashed-bubble",
-            "--disable-translate"
+            "--disable-infobars"
         ])
     else:
         import webbrowser

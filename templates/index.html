@@ -1,140 +1,239 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Test Pattern Controller</title>
+<title>Broadcast Controller</title>
 
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial;
-            background: #0f172a;
-            color: white;
-        }
+<style>
+body{
+margin:0;
+font-family:Arial;
+background:#0f172a;
+color:white;
+}
 
-        .top {
-            padding: 15px;
-        }
+.tabs{
+display:flex;
+background:#1e293b;
+padding:10px;
+gap:10px;
+}
 
-        h2 {
-            margin-bottom: 10px;
-        }
+.tabs button{
+flex:1;
+padding:10px;
+border:none;
+background:#334155;
+color:white;
+border-radius:6px;
+cursor:pointer;
+}
 
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 10px;
-        }
+.panel{display:none;padding:10px;}
+.active{display:block;}
 
-        .card {
-            background: #1e293b;
-            padding: 10px;
-            border-radius: 10px;
-            cursor: pointer;
-            border: 2px solid transparent;
-        }
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:10px;
+}
 
-        .card.selected {
-            border: 2px solid #3b82f6;
-        }
+.card{
+background:#1e293b;
+padding:10px;
+border-radius:10px;
+cursor:pointer;
+text-align:center;
+border:2px solid transparent;
+}
 
-        img {
-            width: 100%;
-            border-radius: 6px;
-        }
+.selected{border:2px solid #3b82f6;}
 
-        .bottom {
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-            background: #111827;
-            padding: 15px;
-            display: flex;
-            gap: 10px;
-        }
+.bottom{
+position:fixed;
+bottom:0;
+width:100%;
+background:#111827;
+padding:15px;
+}
 
-        select, button {
-            padding: 10px;
-            flex: 1;
-        }
+.out-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+gap:10px;
+}
 
-        .go {
-            background: #3b82f6;
-            color: white;
-            border: none;
-        }
+.out{
+background:#1e293b;
+padding:10px;
+border-radius:10px;
+text-align:center;
+cursor:pointer;
+}
 
-        .stop {
-            background: red;
-            color: white;
-            border: none;
-        }
-    </style>
+.active-out{background:#3b82f6;}
 
-    <script>
-        function selectPattern(name) {
-            document.getElementById("pattern_input").value = name;
+.row{
+display:flex;
+gap:10px;
+margin-top:10px;
+}
 
-            document.querySelectorAll(".card").forEach(c =>
-                c.classList.remove("selected")
-            );
+input,select{
+padding:10px;
+border-radius:6px;
+border:none;
+width:100%;
+margin-bottom:10px;
+}
 
-            document.getElementById("card_" + name).classList.add("selected");
-        }
-    </script>
+button{
+padding:10px;
+border:none;
+border-radius:8px;
+cursor:pointer;
+}
+
+.go{background:#3b82f6;color:white;flex:1;}
+.stop{background:red;color:white;flex:1;}
+
+.statusBox{
+background:#1e293b;
+padding:10px;
+border-radius:10px;
+margin-bottom:10px;
+}
+</style>
+
+<script>
+
+let selectedPattern=null;
+let selectedProtocol="rtsp";
+let selectedMode="stream";
+
+function selectPattern(name){
+selectedPattern=name;
+document.querySelectorAll(".card").forEach(c=>c.classList.remove("selected"));
+event.currentTarget.classList.add("selected");
+}
+
+function selectProtocol(p){
+selectedProtocol=p;
+document.querySelectorAll("[data-protocol]").forEach(e=>e.classList.remove("active-out"));
+event.currentTarget.classList.add("active-out");
+}
+
+function selectMode(m){
+selectedMode=m;
+document.querySelectorAll("[data-mode]").forEach(e=>e.classList.remove("active-out"));
+event.currentTarget.classList.add("active-out");
+}
+
+async function startStream(){
+
+let name=document.getElementById("streamName").value;
+
+await fetch("/start_stream",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+pattern:selectedPattern,
+protocol:selectedProtocol,
+mode:selectedMode,
+name:name,
+monitor:document.getElementById("monitorSelect").value
+})
+});
+}
+
+async function stopStream(id){
+await fetch("/stop_stream/"+id,{method:"POST"});
+}
+
+async function load(){
+let r=await fetch("/status");
+let d=await r.json();
+
+document.getElementById("streams").innerHTML=d.map(s=>`
+<div class="statusBox">
+<b>${s.id}</b><br>
+${s.pattern}<br>
+${s.protocol} | ${s.mode}<br>
+${s.output}<br>
+${s.running?"🟢":"🔴"}<br>
+<button onclick="stopStream('${s.id}')">STOP</button>
+</div>
+`).join("");
+}
+
+setInterval(load,1000);
+window.onload=load;
+
+function showTab(t){
+document.getElementById("control").classList.remove("active");
+document.getElementById("streamsTab").classList.remove("active");
+document.getElementById(t).classList.add("active");
+}
+
+</script>
+
 </head>
 
 <body>
 
-<div class="top">
-    <h2>Test Patterns</h2>
-
-    <div class="grid">
-        {% for name in patterns %}
-        <div class="card {% if selected_pattern == name %}selected{% endif %}"
-             id="card_{{ name }}"
-             onclick="selectPattern('{{ name }}')">
-
-            <img src="/preview/{{ name }}">
-            <div>{{ name }}</div>
-
-        </div>
-        {% endfor %}
-    </div>
+<div class="tabs">
+<button onclick="showTab('control')">Control</button>
+<button onclick="showTab('streamsTab')">Streams</button>
 </div>
 
-<form method="POST">
+<div id="control" class="panel active">
 
-    <input type="hidden" name="pattern" id="pattern_input" value="{{ selected_pattern or '' }}">
+<h2>Patterns</h2>
 
-    <div class="bottom">
+<div class="grid">
+{% for name in patterns %}
+<div class="card" onclick="selectPattern('{{name}}')">
+<img src="/preview/{{name}}" style="width:100%;border-radius:6px;">
+{{name}}
+</div>
+{% endfor %}
+</div>
 
-        <select name="output">
-            <option value="file" {% if selected_output == "file" %}selected{% endif %}>
-                Export to File
-            </option>
+<div class="bottom">
 
-            <option value="download" {% if selected_output == "download" %}selected{% endif %}>
-                Download Render (choose save location)
-            </option>
+<input id="streamName" placeholder="Stream name (used as ID)">
 
-            {% for idx, m in monitors %}
-            <option value="monitor_{{ idx }}"
-                {% if selected_output == "monitor_" ~ idx %}selected{% endif %}>
-                Monitor {{ idx+1 }} ({{ m.width }}x{{ m.height }})
-            </option>
-            {% endfor %}
-        </select>
+<select id="monitorSelect">
+{% for m in monitors %}
+<option value="{{m.id}}">{{m.name}}</option>
+{% endfor %}
+</select>
 
-        <button class="go" type="submit">GO</button>
+<div class="out-grid">
 
-    </div>
-</form>
+<div class="out" data-protocol onclick="selectProtocol('rtsp')">RTSP</div>
+<div class="out" data-protocol onclick="selectProtocol('rtmp')">RTMP</div>
+<div class="out" data-protocol onclick="selectProtocol('srt')">SRT</div>
+<div class="out" data-protocol onclick="selectProtocol('udp')">UDP</div>
 
-<form method="POST" action="/stop">
-    <div class="bottom" style="bottom:60px; justify-content:center;">
-        <button class="stop">STOP</button>
-    </div>
-</form>
+<div class="out" data-mode onclick="selectMode('stream')">Stream</div>
+<div class="out" data-mode onclick="selectMode('file')">File</div>
+<div class="out" data-mode onclick="selectMode('monitor')">Monitor</div>
+
+</div>
+
+<div class="row">
+<button class="stop">STOP</button>
+<button class="go" onclick="startStream()">GO</button>
+</div>
+
+</div>
+
+</div>
+
+<div id="streamsTab" class="panel">
+<h2>Active Streams</h2>
+<div id="streams"></div>
+</div>
 
 </body>
 </html>

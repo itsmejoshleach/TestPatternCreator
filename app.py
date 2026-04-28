@@ -1,19 +1,35 @@
-from flask import Flask, render_template, request, redirect, url_for, Response, send_file
+from flask import Flask, render_template, request, jsonify, Response
 import subprocess
+import uuid
+import os
 from screeninfo import get_monitors
 
 app = Flask(__name__)
 
-# ----------------------------
-# STATE (remembers selections)
-# ----------------------------
-selected_pattern = None
-selected_output = "file"
-current_process = None
+# ---------------- MEDIA SERVER ----------------
+mediamtx_process = None
+MEDIAMTX_PATH = os.path.join(os.getcwd(), "mediamtx.exe")
 
-# ----------------------------
-# PATTERNS
-# ----------------------------
+def ensure_mediamtx_running():
+    global mediamtx_process
+
+    if mediamtx_process and mediamtx_process.poll() is None:
+        return
+
+    if not os.path.exists(MEDIAMTX_PATH):
+        print("MediaMTX not found")
+        return
+
+    mediamtx_process = subprocess.Popen(
+        [MEDIAMTX_PATH],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+# ---------------- STATE ----------------
+streams = {}
+
+# ---------------- PATTERNS ----------------
 patterns = {
     "SMPTE Bars": "smptebars=size=1280x720:rate=30",
     "HD Bars": "smptehdbars=size=1920x1080:rate=30",
@@ -24,29 +40,147 @@ patterns = {
     "Zone Plate": "zoneplate=size=1280x720:rate=30"
 }
 
-# ----------------------------
-# MONITORS
-# ----------------------------
-def get_monitor_list():
-    return list(enumerate(get_monitors()))
+# ---------------- MONITORS ----------------
+def list_monitors():
+    mons = get_monitors()
+    return [
+        {
+            "id": i,
+            "name": f"Monitor {i} ({m.width}x{m.height})"
+        }
+        for i, m in enumerate(mons)
+    ]
 
-# ----------------------------
-# STOP OUTPUT
-# ----------------------------
-def stop_process():
-    global current_process
-    if current_process and current_process.poll() is None:
-        current_process.terminate()
-        current_process = None
+# ---------------- OUTPUT ----------------
+def build_output(protocol, name):
+    if protocol == "rtsp":
+        return f"rtsp://127.0.0.1:8554/{name}"
+    if protocol == "rtmp":
+        return f"rtmp://127.0.0.1:1935/live/{name}"
+    if protocol == "srt":
+        return f"srt://127.0.0.1:8890?streamid={name}"
+    if protocol == "udp":
+        return f"udp://127.0.0.1:1234"
 
-# ----------------------------
-# PREVIEW IMAGE
-# ----------------------------
+# ---------------- STREAM CMD ----------------
+def ffmpeg_stream(pattern, output, protocol):
+
+    base = [
+        "ffmpeg",
+        "-re",
+        "-f", "lavfi",
+        "-i", pattern,
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-pix_fmt", "yuv420p",
+        "-g", "50"
+    ]
+
+    if protocol == "rtsp":
+        return base + ["-f", "rtsp", "-rtsp_transport", "tcp", output]
+
+    if protocol == "rtmp":
+        return base + ["-f", "flv", output]
+
+    return base + ["-f", "mpegts", output]
+
+# ---------------- START ----------------
+@app.route("/start_stream", methods=["POST"])
+def start_stream():
+
+    ensure_mediamtx_running()
+
+    data = request.json
+
+    pattern = patterns[data["pattern"]]
+    mode = data.get("mode", "stream")
+    protocol = data.get("protocol")
+    name = data.get("name") or str(uuid.uuid4())[:8]
+    monitor_id = int(data.get("monitor", 0))
+
+    proc = None
+    output = None
+
+    # ---------------- STREAM ----------------
+    if mode == "stream":
+
+        output = build_output(protocol, name)
+        cmd = ffmpeg_stream(pattern, output, protocol)
+
+        proc = subprocess.Popen(cmd)
+
+    # ---------------- FILE ----------------
+    elif mode == "file":
+
+        filename = f"{name}.mp4"
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", pattern,
+            "-t", "60",
+            "-c:v", "libx264",
+            filename
+        ]
+
+        proc = subprocess.Popen(cmd)
+        output = filename
+
+    # ---------------- MONITOR ----------------
+    elif mode == "monitor":
+
+        cmd = [
+            "ffplay",
+            "-f", "lavfi",
+            "-i", pattern,
+            "-fs"
+        ]
+
+        proc = subprocess.Popen(cmd)
+        output = f"monitor:{monitor_id}"
+
+    streams[name] = {
+        "id": name,
+        "pattern": data["pattern"],
+        "protocol": protocol,
+        "mode": mode,
+        "output": output,
+        "proc": proc
+    }
+
+    return jsonify({"id": name})
+
+# ---------------- STOP ----------------
+@app.route("/stop_stream/<sid>", methods=["POST"])
+def stop_stream(sid):
+    if sid in streams:
+        p = streams[sid]["proc"]
+        if p and p.poll() is None:
+            p.terminate()
+        del streams[sid]
+    return "ok"
+
+# ---------------- STATUS ----------------
+@app.route("/status")
+def status():
+    out = []
+
+    for s in streams.values():
+        p = s["proc"]
+        out.append({
+            "id": s["id"],
+            "pattern": s["pattern"],
+            "protocol": s["protocol"],
+            "mode": s["mode"],
+            "output": s["output"],
+            "running": p and p.poll() is None
+        })
+
+    return jsonify(out)
+
+# ---------------- PREVIEW ----------------
 @app.route("/preview/<name>")
 def preview(name):
-    if name not in patterns:
-        return "", 404
-
     cmd = [
         "ffmpeg",
         "-f", "lavfi",
@@ -57,86 +191,19 @@ def preview(name):
         "-"
     ]
 
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    return Response(result.stdout, mimetype="image/png")
+    img = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return Response(img.stdout, mimetype="image/png")
 
-# ----------------------------
-# DOWNLOAD RENDER
-# ----------------------------
-@app.route("/download/<pattern>")
-def download(pattern):
-    if pattern not in patterns:
-        return "Invalid pattern", 404
-
-    filename = f"{pattern.replace(' ', '_')}.mp4"
-
-    subprocess.run([
-        "ffmpeg",
-        "-f", "lavfi",
-        "-i", patterns[pattern],
-        "-t", "10",
-        filename
-    ])
-
-    return send_file(filename, as_attachment=True)
-
-# ----------------------------
-# MAIN UI
-# ----------------------------
-@app.route("/", methods=["GET", "POST"])
+# ---------------- UI ----------------
+@app.route("/")
 def index():
-    global selected_pattern, selected_output, current_process
-
-    monitors = get_monitor_list()
-
-    if request.method == "POST":
-        selected_pattern = request.form.get("pattern", selected_pattern)
-        selected_output = request.form.get("output", selected_output)
-
-        if selected_pattern:
-            stop_process()
-
-            # FILE DOWNLOAD MODE
-            if selected_output == "download":
-                return redirect(url_for("download", pattern=selected_pattern))
-
-            # MONITOR OUTPUT MODE
-            if selected_output.startswith("monitor_"):
-                idx = int(selected_output.split("_")[1])
-                m = monitors[idx][1]
-
-                current_process = subprocess.Popen([
-                    "ffplay",
-                    "-f", "lavfi",
-                    "-i", patterns[selected_pattern],
-                    "-left", str(m.x),
-                    "-top", str(m.y),
-                    "-fs",
-                    "-noborder",
-                    "-alwaysontop",
-                    "-loglevel", "quiet"
-                ])
-
-        return redirect(url_for("index"))
-
     return render_template(
         "index.html",
         patterns=patterns,
-        monitors=monitors,
-        selected_pattern=selected_pattern,
-        selected_output=selected_output
+        monitors=list_monitors()
     )
 
-# ----------------------------
-# STOP BUTTON
-# ----------------------------
-@app.route("/stop", methods=["POST"])
-def stop():
-    stop_process()
-    return redirect(url_for("index"))
-
-# ----------------------------
-# RUN
-# ----------------------------
+# ---------------- BOOT ----------------
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    ensure_mediamtx_running()
+    app.run("127.0.0.1", 5000, debug=False)
