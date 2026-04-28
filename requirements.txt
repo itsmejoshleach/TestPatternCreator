@@ -1,2 +1,4 @@
 Flask
 screeninfo
+#pywebview
+pyinstaller

@@ -1,165 +1,140 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FFplay Test Patterns</title>
-
-    <!-- Google Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <title>Test Pattern Controller</title>
 
     <style>
-        :root {
-            --bg: #0f172a;
-            --card: #1e293b;
-            --accent: #3b82f6;
-            --accent-hover: #2563eb;
-            --text: #e2e8f0;
-            --muted: #94a3b8;
-            --danger: #ef4444;
-        }
-
-        * { box-sizing: border-box; }
-
         body {
             margin: 0;
-            font-family: 'Inter', sans-serif;
-            background: radial-gradient(circle at top, #1e293b, #020617);
-            color: var(--text);
+            font-family: Arial;
+            background: #0f172a;
+            color: white;
         }
 
-        header {
-            padding: 20px;
-            text-align: center;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+        .top {
+            padding: 15px;
         }
 
-        h1 {
-            margin: 0;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: auto;
-            padding: 20px;
+        h2 {
+            margin-bottom: 10px;
         }
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
         }
 
         .card {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.05);
-            padding: 20px;
-            border-radius: 16px;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-
-        .card h3 {
-            margin-top: 0;
-            font-weight: 500;
-        }
-
-        select {
-            width: 100%;
+            background: #1e293b;
             padding: 10px;
             border-radius: 10px;
-            border: none;
-            background: #0f172a;
-            color: var(--text);
-            margin-top: 10px;
-        }
-
-        button {
-            width: 100%;
-            padding: 10px;
-            margin-top: 12px;
-            border-radius: 10px;
-            border: none;
-            font-weight: 500;
             cursor: pointer;
-            background: var(--accent);
-            color: white;
-            transition: background 0.2s ease, transform 0.1s ease;
+            border: 2px solid transparent;
         }
 
-        button:hover {
-            background: var(--accent-hover);
+        .card.selected {
+            border: 2px solid #3b82f6;
         }
 
-        button:active {
-            transform: scale(0.97);
+        img {
+            width: 100%;
+            border-radius: 6px;
         }
 
-        .stop-container {
-            text-align: center;
-            margin-top: 30px;
-        }
-
-        .stop-btn {
-            background: var(--danger);
-            width: 200px;
-        }
-
-        .stop-btn:hover {
-            background: #dc2626;
-        }
-
-        footer {
-            text-align: center;
+        .bottom {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: #111827;
             padding: 15px;
-            font-size: 0.85rem;
-            color: var(--muted);
+            display: flex;
+            gap: 10px;
+        }
+
+        select, button {
+            padding: 10px;
+            flex: 1;
+        }
+
+        .go {
+            background: #3b82f6;
+            color: white;
+            border: none;
+        }
+
+        .stop {
+            background: red;
+            color: white;
+            border: none;
         }
     </style>
+
+    <script>
+        function selectPattern(name) {
+            document.getElementById("pattern_input").value = name;
+
+            document.querySelectorAll(".card").forEach(c =>
+                c.classList.remove("selected")
+            );
+
+            document.getElementById("card_" + name).classList.add("selected");
+        }
+    </script>
 </head>
+
 <body>
 
-<header>
-    <h1>FFplay Test Pattern Controller</h1>
-</header>
+<div class="top">
+    <h2>Test Patterns</h2>
 
-<div class="container">
     <div class="grid">
         {% for name in patterns %}
-        <div class="card">
-            <h3>{{ name }}</h3>
-            <form method="POST" action="/play">
-                <input type="hidden" name="pattern" value="{{ name }}">
+        <div class="card {% if selected_pattern == name %}selected{% endif %}"
+             id="card_{{ name }}"
+             onclick="selectPattern('{{ name }}')">
 
-                <select name="monitor">
-                    {% for monitor in monitors %}
-                    <option value="{{ monitor }}">{{ monitor }}</option>
-                    {% endfor %}
-                </select>
+            <img src="/preview/{{ name }}">
+            <div>{{ name }}</div>
 
-                <button type="submit">Play</button>
-            </form>
         </div>
         {% endfor %}
     </div>
-
-    <div class="stop-container">
-        <form method="POST" action="/stop">
-            <button class="stop-btn">Stop Output</button>
-        </form>
-    </div>
 </div>
 
-<footer>
-    Test Pattern Generator • ©️ 2026 itsmejoshleach
-</footer>
+<form method="POST">
+
+    <input type="hidden" name="pattern" id="pattern_input" value="{{ selected_pattern or '' }}">
+
+    <div class="bottom">
+
+        <select name="output">
+            <option value="file" {% if selected_output == "file" %}selected{% endif %}>
+                Export to File
+            </option>
+
+            <option value="download" {% if selected_output == "download" %}selected{% endif %}>
+                Download Render (choose save location)
+            </option>
+
+            {% for idx, m in monitors %}
+            <option value="monitor_{{ idx }}"
+                {% if selected_output == "monitor_" ~ idx %}selected{% endif %}>
+                Monitor {{ idx+1 }} ({{ m.width }}x{{ m.height }})
+            </option>
+            {% endfor %}
+        </select>
+
+        <button class="go" type="submit">GO</button>
+
+    </div>
+</form>
+
+<form method="POST" action="/stop">
+    <div class="bottom" style="bottom:60px; justify-content:center;">
+        <button class="stop">STOP</button>
+    </div>
+</form>
 
 </body>
 </html>
